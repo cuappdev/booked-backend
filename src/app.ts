@@ -1,14 +1,10 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import "reflect-metadata";
 import express, { Express, Request, Response } from "express";
-import { DataSource } from "typeorm";
-import * as path from "path";
-
-const dbConfig = require("../ormconfig");
-
-export const AppDataSource = new DataSource(dbConfig);
+import { AppDataSource } from "./data-source";
+import { router } from "./routes";
+import { scheduleSync } from "./sync";
 
 async function createApp(): Promise<Express> {
   await AppDataSource.initialize()
@@ -50,9 +46,13 @@ async function createApp(): Promise<Express> {
     }
   });
 
+  app.use(router);
+
   app.listen(port, () => {
     console.log(`Booked backend server running on http://localhost:${port}`);
   });
+
+  scheduleSync();
 
   return app;
 }
