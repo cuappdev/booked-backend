@@ -24,6 +24,9 @@ export class Library extends BaseEntity {
   mapUrl!: string | null;
 
   @Column({ type: "varchar", nullable: true })
+  hoursUrl!: string | null;
+
+  @Column({ type: "varchar", nullable: true })
   phone!: string | null;
 
   @Column({ type: "varchar", nullable: true })

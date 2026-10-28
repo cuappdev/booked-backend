@@ -13,6 +13,7 @@ interface ApiLibrary {
     library_unit?: { label?: string };
     library_address?: string;
     google_map_location?: string;
+    full_hours?: string;
     library_url?: string;
     reference_phone?: string;
     email_contact?: string;
@@ -28,6 +29,7 @@ function toLibrary(apiLibrary: ApiLibrary): Partial<Library> {
     name: acf.library_unit?.label || decodeEntities(apiLibrary.title?.rendered || ""),
     address: optional(acf.library_address?.replace(/\r\n/g, "\n")),
     mapUrl: optional(acf.google_map_location),
+    hoursUrl: optional(acf.full_hours),
     phone: optional(acf.reference_phone),
     email: optional(acf.email_contact),
     imageUrl: optional(acf.library_photo ? acf.library_photo.url : undefined),
