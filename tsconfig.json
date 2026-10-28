@@ -10,7 +10,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "."
   },
-  "include": ["src/**/*"]
+  "include": ["ormconfig.ts", "src/**/*"]
 }

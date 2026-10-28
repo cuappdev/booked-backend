@@ -1,60 +1,35 @@
 require("dotenv").config();
+import * as path from "path";
 
-const url =
-  process.env.DATABASE_URL_UNPOOLED ||
-  process.env.DATABASE_URL ||
-  undefined;
-
-function pgExtra(connectionUrl: string | undefined): {
+function pgExtra(): {
   max: number;
   ssl?: { rejectUnauthorized: boolean };
 } {
   const extra: { max: number; ssl?: { rejectUnauthorized: boolean } } = {
     max: Number(process.env.DB_POOL_MAX || 5),
   };
-  if (!connectionUrl) {
-    if (process.env.IS_PROD?.toLowerCase() === "true") {
-      extra.ssl = { rejectUnauthorized: false };
-    }
-    return extra;
-  }
-  if (connectionUrl.includes("sslmode=")) {
-    return extra;
-  }
-  if (
-    connectionUrl.includes("neon.tech") ||
-    process.env.IS_PROD?.toLowerCase() === "true"
-  ) {
+  if (process.env.IS_PROD?.toLowerCase() === "true") {
     extra.ssl = { rejectUnauthorized: false };
   }
   return extra;
 }
 
-const base = url
-  ? {
-      type: "postgres",
-      url,
-    }
-  : {
-      type: "postgres",
-      host: process.env.DB_HOST,
-      port: +(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME || "postgres",
-      password: process.env.DB_PASSWORD || "postgres",
-      database: process.env.DB_NAME,
-    };
-
 module.exports = {
-  ...base,
-  entities: ["src/models/*.ts"],
+  type: "postgres",
+  host: process.env.DB_HOST,
+  port: +(process.env.DB_PORT ?? 5432),
+  username: process.env.DB_USERNAME || "postgres",
+  password: process.env.DB_PASSWORD || "postgres",
+  database: process.env.DB_NAME,
+  entities: [
+    path.join(__dirname, "src/models/*.ts"),
+    path.join(__dirname, "src/models/*.js"),
+  ],
   synchronize: false,
   migrationsRun: false,
-  migrations: ["src/migrations/*.ts"],
-  seeds: ["src/seeds/**/*.ts"],
-  factories: ["src/factories/**/*.ts"],
-  extra: pgExtra(url),
-  cli: {
-    entitiesDir: "src/models/",
-    migrationsDir: "src/migrations/",
-  },
+  migrations: [
+    path.join(__dirname, "src/migrations/*.ts"),
+    path.join(__dirname, "src/migrations/*.js"),
+  ],
+  extra: pgExtra(),
 };

@@ -5,7 +5,6 @@ import {
   ManyToOne,
   ManyToMany,
   JoinColumn,
-  CreateDateColumn,
   BaseEntity
 } from "typeorm";
 import { Library } from "./Library";
@@ -49,7 +48,7 @@ export class Room extends BaseEntity {
   @Column({ type: "simple-array", nullable: true })
   audienceTypes!: string[];
 
-  @CreateDateColumn({ type: "timestamp" })
+  @Column({ type: "timestamp" })
   lastSyncedAt!: Date;
 
   @ManyToOne(() => Library, (library) => library.rooms, { onDelete: "CASCADE" })

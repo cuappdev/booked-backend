@@ -26,8 +26,7 @@ export class Library extends BaseEntity {
 
   @Column({ type: "varchar", nullable: true })
   websiteUrl!: string;
-
-  // 一个图书馆对应多个自习室 (One-to-Many)
+  
   @OneToMany(() => Room, (room) => room.library)
   rooms!: Room[];
 }
