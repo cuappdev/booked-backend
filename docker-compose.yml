@@ -1,0 +1,13 @@
+# What runs on the server. Copy this file and a `.env` into ~/docker-compose/
+# on the droplet; the deploy workflow sets IMAGE_TAG, and BOOKED_ENV (dev or
+# prod) comes from that `.env`.
+services:
+  app:
+    image: cornellappdev/booked-${BOOKED_ENV:-dev}:${IMAGE_TAG}
+    env_file: .env
+    ports:
+      - '127.0.0.1:4000:4000'
+    # Run exactly one copy: each one runs its own hourly Cornell sync.
+    restart: unless-stopped
+    # Lets the server stop promptly when a deploy restarts it.
+    init: true
