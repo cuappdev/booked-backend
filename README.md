@@ -1,59 +1,60 @@
 # Booked Backend
 
 Backend service for Cornell Booked, built with Express, TypeScript, and
-PostgreSQL using TypeORM.
-
-## Requirements
-
-- Node.js and npm
-- PostgreSQL
+PostgreSQL using TypeORM. It copies library and study space data from Cornell's
+website into a database every hour, and serves it to the Booked app.
 
 ## Local setup
 
-1. Install dependencies:
+You need Node.js 18 or newer, npm, and Docker (for the database).
+
+1. Start a PostgreSQL database:
+
+   ```sh
+   docker run -d --name booked-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=booked -p 5432:5432 postgres:16
+   ```
+
+   You only need to run this once. Afterwards, start the database with
+   `docker start booked-db`.
+
+2. Install dependencies and create your environment file:
 
    ```sh
    npm install
-   ```
-
-2. Create your local environment file from the example:
-
-   ```sh
    cp .env.example .env
    ```
 
-   Set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, and `DB_NAME` in
-   `.env` to match your PostgreSQL database. Do not put real credentials in
-   `.env.example` or commit `.env`.
+   The example values match the database from step 1. Don't commit `.env`.
 
-3. Start the development server:
+3. Start the development server, which restarts when you change code:
 
    ```sh
    npm run dev
    ```
 
-   The server listens on port `4000` by default. Set `PORT` in `.env` to use a
-   different port. `GET /health` checks the database connection.
+   The server creates its tables, listens on port `4000`, and pulls data from
+   Cornell. When the log shows `Synced … rooms from Cornell.`, check it works:
 
-## Build and run
+   ```sh
+   curl localhost:4000/health   # {"status":"healthy","database":"Connected"}
+   curl localhost:4000/rooms
+   ```
 
-Compile the TypeScript application and start the compiled output:
+   Until that first sync finishes, `/rooms` returns an empty list.
 
-```sh
-npm run build
-npm start
-```
+To use it from the Booked app, set `EXPO_PUBLIC_API_URL=http://localhost:4000`
+in the app's `.env.local`.
 
-The build writes JavaScript to `dist/`. The start command runs
-`dist/src/app.js`.
+## Environment variables
 
-## Cornell sync
-
-On startup, and then once an hour, the server pulls libraries and study spaces
-from the Cornell Library WordPress API (`library.cornell.edu/wp-json`) and
-stores them in the `libraries` and `rooms` tables. Libraries and rooms sync
-independently, so one failing doesn't stop the other. Anything Cornell no
-longer lists is removed. The sync code lives in `src/sync/`.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DB_HOST`, `DB_PORT`, `DB_NAME` | | Where the PostgreSQL database is. If `DB_NAME` is empty, the server connects to the `postgres` database instead. |
+| `DB_USERNAME`, `DB_PASSWORD` | `postgres` | Database login |
+| `PORT` | `4000` | Port the server listens on |
+| `IS_PROD` | | Set to `true` to connect to the database over SSL, which hosted PostgreSQL usually requires. Not needed with `docker-compose.yml`. |
+| `DB_POOL_MAX` | `5` | Maximum number of database connections |
+| `BOOKED_ENV` | `dev` | Server only: which Docker image `docker-compose.yml` runs (`dev` or `prod`) |
 
 ## API
 
@@ -64,23 +65,60 @@ longer lists is removed. The sync code lives in `src/sync/`.
 | `GET /rooms/:id` | One room by its UUID, or `404` |
 | `GET /health` | Whether the database is reachable |
 
-## Database schema
+## How it works
 
-TypeORM schema synchronization is disabled. The schema is defined by the
-migrations in `src/migrations/`, which run automatically when the server
-starts.
+- **Cornell sync** (`src/sync/`): on startup, and then once an hour, the server
+  pulls libraries and study spaces from Cornell's WordPress API into the
+  `libraries` and `rooms` tables. Libraries and rooms sync independently, so
+  one failing doesn't stop the other. Anything Cornell no longer lists is
+  removed, but an empty response from Cornell never wipes the tables.
+- **Database schema** (`src/migrations/`): migrations run automatically when
+  the server starts. After changing a model, generate one with the database
+  running:
 
-After changing a model, generate a migration for it with the database running:
+  ```sh
+  npm run migration:generate -- src/migrations/DescribeTheChange
+  ```
 
-```sh
-npm run migration:generate -- src/migrations/DescribeTheChange
-```
+## Deployment
 
-For a local PostgreSQL database, Docker works well:
+The server and its PostgreSQL database run as two Docker containers on one
+DigitalOcean droplet, like other AppDev backends. A GitHub Actions workflow
+builds the image, pushes it to Docker Hub (`cornellappdev/booked-dev` or
+`cornellappdev/booked-prod`), and restarts the containers on the droplet. The
+database keeps its data in a Docker volume, so deploys don't touch it.
 
-```sh
-docker run -d --name booked-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=booked -p 5432:5432 postgres:16
-```
+To deploy, open **Actions** in GitHub, pick the **Deploy to dev** or
+**Deploy to prod** workflow, and click **Run workflow**. Once that works,
+uncomment the `push` trigger in `.github/workflows/deploy-*.yml` to deploy
+automatically on every merge to `main` (dev) or `release` (prod).
 
-with `DB_HOST=localhost`, `DB_PORT=5432`, `DB_USERNAME=postgres`,
-`DB_PASSWORD=postgres` and `DB_NAME=booked` in `.env`.
+To keep costs down, you can set up prod only and test changes locally.
+
+### One-time setup
+
+1. **Docker Hub:** create `cornellappdev/booked-dev` and `cornellappdev/booked-prod`.
+2. **Droplet:** create one with at least 1 GB of memory, install Docker and
+   docker-compose, then create `~/docker-compose/` containing:
+   - a copy of `docker-compose.yml` from this repo
+   - a `.env` with `DB_USERNAME`, a strong `DB_PASSWORD`, `DB_NAME` and
+     `BOOKED_ENV=dev` or `BOOKED_ENV=prod`. Leave out `IS_PROD`, since the app
+     reaches the database inside the droplet without SSL.
+
+   The server only accepts connections from the droplet itself
+   (`127.0.0.1:4000`), so put a reverse proxy with HTTPS, such as nginx, in
+   front of it at a domain like `booked-backend.cornellappdev.com`.
+3. **GitHub secrets** (Settings → Secrets and variables → Actions):
+   `DOCKER_USERNAME`, `DOCKER_PASSWORD`, `SERVER_USERNAME`, plus each
+   droplet's address and SSH private key as `DEV_SERVER_HOST` /
+   `DEV_SERVER_KEY` and `PROD_SERVER_HOST` / `PROD_SERVER_KEY`.
+
+After the first deploy, check `https://<your domain>/health`, then set the
+Booked app's production `EXPO_PUBLIC_API_URL` to that domain.
+
+### Backups
+
+The database has no automatic backups. Today that's fine: everything in it is
+copied from Cornell, and a fresh server rebuilds it with its first sync. Once
+it stores user data, such as favorites, turn on DigitalOcean's droplet backups
+or schedule a `pg_dump`.
