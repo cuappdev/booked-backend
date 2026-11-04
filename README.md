@@ -52,7 +52,7 @@ in the app's `.env.local`.
 | `DB_HOST`, `DB_PORT`, `DB_NAME` | | Where the PostgreSQL database is. If `DB_NAME` is empty, the server connects to the `postgres` database instead. |
 | `DB_USERNAME`, `DB_PASSWORD` | `postgres` | Database login |
 | `PORT` | `4000` | Port the server listens on |
-| `IS_PROD` | | Set to `true` to connect to the database over SSL, which hosted PostgreSQL (such as DigitalOcean's) requires |
+| `IS_PROD` | | Set to `true` to connect to the database over SSL, which hosted PostgreSQL usually requires. Not needed with `docker-compose.yml`. |
 | `DB_POOL_MAX` | `5` | Maximum number of database connections |
 | `BOOKED_ENV` | `dev` | Server only: which Docker image `docker-compose.yml` runs (`dev` or `prod`) |
 
@@ -82,36 +82,43 @@ in the app's `.env.local`.
 
 ## Deployment
 
-The server runs as a Docker container on a DigitalOcean droplet, like other
-AppDev backends. A GitHub Actions workflow builds the image, pushes it to
-Docker Hub (`cornellappdev/booked-dev` or `cornellappdev/booked-prod`), and
-restarts the container on the droplet.
+The server and its PostgreSQL database run as two Docker containers on one
+DigitalOcean droplet, like other AppDev backends. A GitHub Actions workflow
+builds the image, pushes it to Docker Hub (`cornellappdev/booked-dev` or
+`cornellappdev/booked-prod`), and restarts the containers on the droplet. The
+database keeps its data in a Docker volume, so deploys don't touch it.
 
 To deploy, open **Actions** in GitHub, pick the **Deploy to dev** or
 **Deploy to prod** workflow, and click **Run workflow**. Once that works,
 uncomment the `push` trigger in `.github/workflows/deploy-*.yml` to deploy
 automatically on every merge to `main` (dev) or `release` (prod).
 
-Only run one copy of the server, since each copy runs its own hourly sync.
+To keep costs down, you can set up prod only and test changes locally.
 
 ### One-time setup
 
 1. **Docker Hub:** create `cornellappdev/booked-dev` and `cornellappdev/booked-prod`.
-2. **Database:** create a PostgreSQL database, such as DigitalOcean Managed
-   PostgreSQL.
-3. **Droplet:** install Docker and docker-compose, then create
-   `~/docker-compose/` containing:
+2. **Droplet:** create one with at least 1 GB of memory, install Docker and
+   docker-compose, then create `~/docker-compose/` containing:
    - a copy of `docker-compose.yml` from this repo
-   - a `.env` with the database's `DB_*` values, `IS_PROD=true`, and
-     `BOOKED_ENV=dev` or `BOOKED_ENV=prod`
+   - a `.env` with `DB_USERNAME`, a strong `DB_PASSWORD`, `DB_NAME` and
+     `BOOKED_ENV=dev` or `BOOKED_ENV=prod`. Leave out `IS_PROD`, since the app
+     reaches the database inside the droplet without SSL.
 
-   The container only accepts connections from the droplet itself
+   The server only accepts connections from the droplet itself
    (`127.0.0.1:4000`), so put a reverse proxy with HTTPS, such as nginx, in
    front of it at a domain like `booked-backend.cornellappdev.com`.
-4. **GitHub secrets** (Settings → Secrets and variables → Actions):
+3. **GitHub secrets** (Settings → Secrets and variables → Actions):
    `DOCKER_USERNAME`, `DOCKER_PASSWORD`, `SERVER_USERNAME`, plus each
    droplet's address and SSH private key as `DEV_SERVER_HOST` /
    `DEV_SERVER_KEY` and `PROD_SERVER_HOST` / `PROD_SERVER_KEY`.
 
 After the first deploy, check `https://<your domain>/health`, then set the
 Booked app's production `EXPO_PUBLIC_API_URL` to that domain.
+
+### Backups
+
+The database has no automatic backups. Today that's fine: everything in it is
+copied from Cornell, and a fresh server rebuilds it with its first sync. Once
+it stores user data, such as favorites, turn on DigitalOcean's droplet backups
+or schedule a `pg_dump`.
