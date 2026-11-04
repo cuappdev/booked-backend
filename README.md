@@ -47,9 +47,40 @@ npm start
 The build writes JavaScript to `dist/`. The start command runs
 `dist/src/app.js`.
 
+## Cornell sync
+
+On startup, and then once an hour, the server pulls libraries and study spaces
+from the Cornell Library WordPress API (`library.cornell.edu/wp-json`) and
+stores them in the `libraries` and `rooms` tables. Libraries and rooms sync
+independently, so one failing doesn't stop the other. Anything Cornell no
+longer lists is removed. The sync code lives in `src/sync/`.
+
+## API
+
+| Route | Returns |
+| --- | --- |
+| `GET /libraries` | All libraries, sorted by name |
+| `GET /rooms` | All rooms, sorted by title |
+| `GET /rooms/:id` | One room by its UUID, or `404` |
+| `GET /health` | Whether the database is reachable |
+
 ## Database schema
 
-TypeORM schema synchronization is disabled, and the repository does not yet
-contain database migrations. The models therefore do not create database
-tables automatically. Add and run migrations before using application features
-that require those tables.
+TypeORM schema synchronization is disabled. The schema is defined by the
+migrations in `src/migrations/`, which run automatically when the server
+starts.
+
+After changing a model, generate a migration for it with the database running:
+
+```sh
+npm run migration:generate -- src/migrations/DescribeTheChange
+```
+
+For a local PostgreSQL database, Docker works well:
+
+```sh
+docker run -d --name booked-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=booked -p 5432:5432 postgres:16
+```
+
+with `DB_HOST=localhost`, `DB_PORT=5432`, `DB_USERNAME=postgres`,
+`DB_PASSWORD=postgres` and `DB_NAME=booked` in `.env`.

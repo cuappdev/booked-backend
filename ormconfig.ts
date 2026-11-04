@@ -26,7 +26,7 @@ module.exports = {
     path.join(__dirname, "src/models/*.js"),
   ],
   synchronize: false,
-  migrationsRun: false,
+  migrationsRun: true,
   migrations: [
     path.join(__dirname, "src/migrations/*.ts"),
     path.join(__dirname, "src/migrations/*.js"),
