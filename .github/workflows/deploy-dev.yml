@@ -51,4 +51,11 @@ jobs:
             docker-compose down
             sleep 20s
             docker-compose up -d
+            # Fail the deploy, with logs, if the server doesn't become healthy.
+            # /health only answers after the database connects and migrations run.
+            for i in $(seq 1 30); do
+              curl -fsS localhost:4000/health && break
+              if [ "$i" = 30 ]; then docker-compose logs --tail 50 app; exit 1; fi
+              sleep 2
+            done
             yes | docker system prune -a

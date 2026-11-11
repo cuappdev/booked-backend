@@ -116,6 +116,19 @@ To keep costs down, you can set up prod only and test changes locally.
 After the first deploy, check `https://<your domain>/health`, then set the
 Booked app's production `EXPO_PUBLIC_API_URL` to that domain.
 
+### Changing the database password
+
+Postgres only reads `DB_PASSWORD` the first time it creates its data, so
+changing `.env` alone isn't enough. On the droplet:
+
+```sh
+cd ~/docker-compose
+docker-compose exec db psql -U postgres -c "ALTER USER postgres PASSWORD 'new-password'"
+```
+
+Then set `DB_PASSWORD=new-password` in `.env` and restart the app with
+`docker-compose up -d --force-recreate app`.
+
 ### Backups
 
 The database has no automatic backups. Today that's fine: everything in it is
