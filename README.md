@@ -61,8 +61,22 @@ longer lists is removed. The sync code lives in `src/sync/`.
 | --- | --- |
 | `GET /libraries` | All libraries, sorted by name |
 | `GET /rooms` | All rooms, sorted by title |
+| `GET /rooms/search?q={query}` | Matching rooms, with their library, and pagination metadata |
 | `GET /rooms/:id` | One room by its UUID, or `404` |
 | `GET /health` | Whether the database is reachable |
+
+Room search is case-insensitive and matches substrings in room titles,
+library names, descriptions, and room attributes. Separate query words must
+each match somewhere in the room data. Results prioritize title and library
+matches. Use `limit` (default `20`, maximum `50`) and `offset` (default `0`) to
+page through results; the response includes `results`, `total`, `limit`, and
+`offset`.
+
+For example:
+
+```text
+GET /rooms/search?q=quiet%20olin&limit=5
+```
 
 ## Database schema
 

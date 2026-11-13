@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { Library } from "./models/Library";
 import { Room } from "./models/Room";
+import { parseRoomSearchParams, searchRooms } from "./search/roomSearch";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,6 +26,16 @@ router.get("/libraries/:id", handle(async (req, res) => {
 
 router.get("/rooms", handle(async (_req, res) => {
   res.json(await Room.find({ order: { title: "ASC" } }));
+}));
+
+router.get("/rooms/search", handle(async (req, res) => {
+  const parsed = parseRoomSearchParams(req.query.q, req.query.limit, req.query.offset);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+
+  res.json(await searchRooms(parsed.value));
 }));
 
 router.get("/rooms/:id", handle(async (req, res) => {
