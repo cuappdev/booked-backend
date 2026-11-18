@@ -32,8 +32,7 @@ export class Room extends BaseEntity {
   @Column({ type: "varchar" })
   title!: string;
 
-  // Cornell's API no longer exposes the description or Reserve link; both
-  // stay empty until a sync reads them from the room's page (`sourceUrl`).
+  // Description and reservation URL are filled from Cornell's room page.
   @Column({ type: "text", nullable: true })
   description!: string | null;
 
@@ -77,8 +76,7 @@ export class Room extends BaseEntity {
   @Column({ type: "timestamptz" })
   lastSyncedAt!: Date;
 
-  // Cornell's API doesn't say which library a room is in, so this stays
-  // empty until a sync reads it from the room's page.
+  // The Library is resolved by Cornell's room page and linked during sync.
   @Column({ type: "uuid", nullable: true })
   libraryId!: string | null;
 

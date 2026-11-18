@@ -1,6 +1,8 @@
 import { In, Not } from "typeorm";
 import { AppDataSource } from "../data-source";
+import { Library } from "../models/Library";
 import { Room, ReservationType } from "../models/Room";
+import { fetchRoomDetails, RoomDetailsResult } from "./roomDetails";
 import { WP_API, fetchAllPages, decodeEntities } from "./wordpress";
 
 const SOURCE = "cornell";
@@ -71,11 +73,37 @@ const isReservationFeature = (feature: string): feature is ReservationType =>
 
 const ACCESSIBLE = "Accessible";
 
-function toRoom(apiSpace: ApiSpace, taxonomyMaps: TaxonomyMaps, imageMap: Map<number, string>, syncedAt: Date): Partial<Room> {
+function normalizeLibraryName(name: string): string {
+  return name.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+async function mapWithConcurrency<T, U>(items: T[], limit: number, mapper: (item: T) => Promise<U>): Promise<U[]> {
+  const results = new Array<U>(items.length);
+  let nextIndex = 0;
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(items[index]);
+    }
+  }));
+
+  return results;
+}
+
+function toRoom(
+  apiSpace: ApiSpace,
+  taxonomyMaps: TaxonomyMaps,
+  imageMap: Map<number, string>,
+  syncedAt: Date,
+  libraryId?: string | null,
+  description?: string | null,
+  reservationUrl?: string | null
+): Partial<Room> {
   const features = namesFromIds(apiSpace.space_features, taxonomyMaps.space_features);
   const support = namesFromIds(apiSpace.support_type, taxonomyMaps.support_type);
 
-  return {
+  const room: Partial<Room> = {
     source: SOURCE,
     sourceId: String(apiSpace.id),
     slug: apiSpace.slug,
@@ -93,6 +121,17 @@ function toRoom(apiSpace: ApiSpace, taxonomyMaps: TaxonomyMaps, imageMap: Map<nu
     sourceUpdatedAt: apiSpace.modified_gmt ? new Date(`${apiSpace.modified_gmt}Z`) : null,
     lastSyncedAt: syncedAt,
   };
+
+  if (libraryId !== undefined) {
+    room.libraryId = libraryId;
+  }
+  if (description !== undefined) {
+    room.description = description;
+  }
+  if (reservationUrl !== undefined) {
+    room.reservationUrl = reservationUrl;
+  }
+  return room;
 }
 
 // Replaces the stored rooms with Cornell's current list of spaces. Returns how
@@ -107,8 +146,44 @@ export async function syncRooms(): Promise<number> {
     fetchImageMap(apiSpaces.map((space) => space.id)),
   ]);
 
+  const [libraries, roomDetails] = await Promise.all([
+    AppDataSource.getRepository(Library).find(),
+    mapWithConcurrency(apiSpaces, 5, (space) => fetchRoomDetails(space.link)),
+  ]);
+
+  const libraryByName = new Map(
+    libraries.map((library) => [normalizeLibraryName(library.name), library])
+  );
+
   const syncedAt = new Date();
-  const rooms = apiSpaces.map((space) => toRoom(space, taxonomyMaps, imageMap, syncedAt));
+  const rooms = apiSpaces.map((space, index) => {
+    const result: RoomDetailsResult = roomDetails[index];
+    let libraryId: string | null | undefined;
+    let description: string | null | undefined;
+    let reservationUrl: string | null | undefined;
+
+    if (result.status === "success") {
+      const scraped = result.details;
+      description = scraped.description;
+      reservationUrl = scraped.reservationUrl;
+
+      if (scraped.libraryName) {
+        const library = libraryByName.get(normalizeLibraryName(scraped.libraryName));
+        if (library) {
+          libraryId = library.id;
+        } else {
+          console.warn(`Could not match room ${space.slug} to library: ${scraped.libraryName}`);
+          libraryId = null;
+        }
+      } else {
+        libraryId = null;
+      }
+    } else {
+      console.error(`Failed to read details for room ${space.slug}:`, result.error);
+    }
+
+    return toRoom(space, taxonomyMaps, imageMap, syncedAt, libraryId, description, reservationUrl);
+  });
 
   await AppDataSource.transaction(async (manager) => {
     // Remove rooms Cornell dropped first, so a reused slug can't collide.
